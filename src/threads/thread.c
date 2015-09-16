@@ -617,8 +617,10 @@ schedule (void)
   if (wakeup != idle_thread)
     prev = switch_threads (cur, wakeup);
 
-  if (cur != next)
-    prev = switch_threads (cur, next);
+  else {
+    if (cur != next)
+     prev = switch_threads (cur, next);
+  }
   thread_schedule_tail (prev);
 }
 
