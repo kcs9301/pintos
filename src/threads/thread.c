@@ -541,9 +541,13 @@ wake_up_thread (void)
         next = now->next;
       }
       else{
+        struct thread *readythread = list_entry (now, struct thread, sleepelem);
         list_remove_sleep (now);
-        return list_entry ( now, struct thread, sleepelem );
-    }}
+        now = next;
+        next = now->next;
+        list_push_back (&ready_list, &readythread->elem);
+        readythread->status = THREAD_READY;
+      }}
     return idle_thread;
   }
 }
@@ -604,11 +608,12 @@ thread_schedule_tail (struct thread *prev)
 static void
 schedule (void) 
 {
+
+  struct thread *wakeup = wake_up_thread ();
   struct thread *cur = running_thread ();
   struct thread *next = next_thread_to_run ();
   struct thread *prev = NULL;
 
-  struct thread *wakeup = wake_up_thread ();
 
   ASSERT (intr_get_level () == INTR_OFF);
   ASSERT (cur->status != THREAD_RUNNING);

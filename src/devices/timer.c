@@ -92,9 +92,9 @@ timer_sleep (int64_t ticks)
   int64_t start = timer_ticks ();
 
   ASSERT (intr_get_level () == INTR_ON);
+  //printf ("start : %lld // ticks : %lld \n", start, ticks);
   while (timer_elapsed (start) < ticks){
     thread_yield_sleep (start, ticks);
-    printf(" -hi- ");
   }
 }
 

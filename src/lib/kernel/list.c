@@ -233,6 +233,12 @@ list_push_back (struct list *list, struct list_elem *elem)
 }
 
 void
+list_push_back_sleeptoready (struct list *list, struct list_elem_sleep *elem)
+{
+  list_insert_sleep (list_end (list), elem);
+}
+
+void
 list_push_back_sleep (struct list *list, struct list_elem_sleep *elem)
 {
   list_insert_sleep (list_end (list), elem);
