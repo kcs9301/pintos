@@ -40,6 +40,9 @@ static struct thread *initial_thread;
 /* Lock used by allocate_tid(). */
 static struct lock tid_lock;
 
+static bool priority_less (const struct list_elem *, const struct list_elem *,
+                        void *);
+
 /* Stack frame for kernel_thread(). */
 struct kernel_thread_frame 
   {
@@ -520,8 +523,12 @@ next_thread_to_run (void)
 {
   if (list_empty (&ready_list))
     return idle_thread;
-  else
+  else{
+    list_sort (&ready_list, priority_less, NULL);
+    //list_reverse (&ready_list);
+
     return list_entry (list_pop_front (&ready_list), struct thread, elem);
+  }
 }
 
 static struct thread *
@@ -618,14 +625,14 @@ schedule (void)
   ASSERT (intr_get_level () == INTR_OFF);
   ASSERT (cur->status != THREAD_RUNNING);
   ASSERT (is_thread (next));
-
+/*
   if (wakeup != idle_thread)
     prev = switch_threads (cur, wakeup);
 
-  else {
+  else { */
     if (cur != next)
      prev = switch_threads (cur, next);
-  }
+  //}
   thread_schedule_tail (prev);
 }
 
@@ -646,3 +653,14 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+
+static bool
+priority_less (const struct list_elem *a, const struct list_elem *b,
+            void *aux UNUSED) 
+{
+  const struct thread *a_ = list_entry (a, struct thread, elem);
+  const struct thread *b_ = list_entry (b, struct thread, elem);
+  
+  return a_->priority > b_->priority;
+}

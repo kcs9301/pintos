@@ -34,6 +34,7 @@
 static bool is_sorted (struct list_elem *a, struct list_elem *b,
                        list_less_func *less, void *aux) UNUSED;
 
+
 /* Returns true if ELEM is a head, false otherwise. */
 static inline bool
 is_head (struct list_elem *elem)
@@ -556,3 +557,4 @@ list_min (struct list *list, list_less_func *less, void *aux)
     }
   return min;
 }
+
