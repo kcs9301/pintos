@@ -41,6 +41,11 @@
 
    - up or "V": increment the value (and wake up one waiting
      thread, if any). */
+
+static bool
+priorityless (const struct list_elem *a, const struct list_elem *b,
+            void *aux UNUSED);
+
 void
 sema_init (struct semaphore *sema, unsigned value) 
 {
@@ -113,9 +118,12 @@ sema_up (struct semaphore *sema)
   ASSERT (sema != NULL);
 
   old_level = intr_disable ();
-  if (!list_empty (&sema->waiters)) 
+  if (!list_empty (&sema->waiters)) {
+    list_sort (&sema->waiters, priorityless, NULL);
+    list_reverse (&sema->waiters);
     thread_unblock (list_entry (list_pop_front (&sema->waiters),
                                 struct thread, elem));
+  }
   sema->value++;
   intr_set_level (old_level);
 }
@@ -196,8 +204,48 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
+  //thread_current ()->lock_num = lock->lock_num;
+
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
+
+  //donation_check(th, th->waiter_for_me);
+}
+
+void
+donation_check (struct thread *th, struct list *wait_list)
+{
+  if (wait_list == NULL)
+    return 0;
+
+  struct list_elem *a = wait_list->head.next;
+  struct list_elem *b = a->next;
+  int highest = th->priority;
+
+  if (list_empty (wait_list)){
+    printf("empty\n");
+    printf("%p",wait_list);
+  }
+
+  while ( a != &wait_list->tail ){
+
+    struct thread *t = list_entry (a, struct thread, elem);
+    ASSERT (wait_list != NULL);
+    printf ("how many \n");
+    if (t->priority > highest){
+      highest = t->priority;
+    }
+    a = b;
+    b = a->next;
+  }
+
+  if (highest != th->priority){
+    th->p[0]=1;
+    th->p[1]=th->priority;
+    th->priority = highest;
+  }
+
+
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -228,11 +276,23 @@ lock_try_acquire (struct lock *lock)
 void
 lock_release (struct lock *lock) 
 {
+  struct thread *th;
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
   lock->holder = NULL;
+
+  
+  th = thread_current ();
+
+  if (th->p[0]==1){
+    th->priority = th->p[1];
+    th->p[0]=0;
+  }
+  
+
   sema_up (&lock->semaphore);
+  thread_yield ();
 }
 
 /* Returns true if the current thread holds LOCK, false
@@ -335,4 +395,14 @@ cond_broadcast (struct condition *cond, struct lock *lock)
 
   while (!list_empty (&cond->waiters))
     cond_signal (cond, lock);
+}
+
+static bool
+priorityless (const struct list_elem *a, const struct list_elem *b,
+            void *aux UNUSED) 
+{
+  const struct thread *a_ = list_entry (a, struct thread, elem);
+  const struct thread *b_ = list_entry (b, struct thread, elem);
+  
+  return a_->priority < b_->priority;
 }
