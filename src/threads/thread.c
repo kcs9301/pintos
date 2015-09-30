@@ -216,6 +216,8 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
+  thread_yield ();
+
   return tid;
 }
 
@@ -372,6 +374,7 @@ void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
+  thread_yield ();
 }
 
 /* Returns the current thread's priority. */
@@ -654,7 +657,6 @@ allocate_tid (void)
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
-
 static bool
 priority_less (const struct list_elem *a, const struct list_elem *b,
             void *aux UNUSED) 
@@ -664,3 +666,4 @@ priority_less (const struct list_elem *a, const struct list_elem *b,
   
   return a_->priority > b_->priority;
 }
+

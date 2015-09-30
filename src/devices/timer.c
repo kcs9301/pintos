@@ -171,12 +171,10 @@ timer_print_stats (void)
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
+  
   ticks++;
   thread_tick ();
-/*
-  if (ticks % 5 == 0)
-    schedule ();
-*/
+
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
