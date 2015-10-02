@@ -94,10 +94,6 @@ struct thread
 
     int64_t ticks[2];                   /* [0] for start , [1] for ticks */
 
- //   int p[2];         /* [0] ; 0: no donation, 1: donation */
-                      /* [1] : priority before donation */
- //   void *aux;
-
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
@@ -105,9 +101,12 @@ struct thread
 
     struct list donation_to_me;   // list the thread donating to me
 
-    struct list_elem donating;
+    struct list_elem donating;  
+
+    struct thread *holder;  // I'm waiting because of the holder
 
     int before_priority;
+    int dona;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -141,6 +140,8 @@ const char *thread_name (void);
 
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);
+
+
 
 /* Performs some operation on thread t, given auxiliary data AUX. */
 typedef void thread_action_func (struct thread *t, void *aux);

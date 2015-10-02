@@ -200,101 +200,20 @@ lock_init (struct lock *lock)
 void
 lock_acquire (struct lock *lock)
 {
+  enum intr_level old_level;
+  old_level = intr_disable ();
+
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
-  struct thread *t = thread_current ();
-
-  insert_donation_list (lock);
+  try_donating (lock);
+  update_thread_priority (lock->holder);
+  intr_set_level (old_level);
 
   sema_down (&lock->semaphore);
 
   lock->holder = thread_current ();
-}
-
-struct list_elem *
-get_proper_elem (struct lock *lock){
-  struct list_elem *a = lock->holder->donation_to_me.head.next;
-  struct list_elem *b = a->next;
-
-  ASSERT (lock->holder != NULL);
-  ASSERT (!list_empty (&lock->holder->donation_to_me));
-
-  while ( a != &lock->holder->donation_to_me.tail ){
-    if (a->priority == lock->holder->priority)
-      return a;
-    a = b;
-    b = a->next;
-  }
-}
-
-void
-remove_donation_list (struct lock *lock)
-{
-  if (lock->holder == NULL){
-    return 0;
-  }
-
-  if (list_empty (&lock->holder->donation_to_me))
-    return 0;
-
-  struct thread *t = thread_current ();
-  ASSERT (t == lock->holder);
-
-  if (t->priority != t->before_priority ){
-    struct list_elem *proper = get_proper_elem (lock);
-
-    ASSERT (proper != NULL);
-
-    if (t->priority < proper->priority || t->priority == proper->priority){
-      list_remove (proper);
-      if (list_empty (&t->donation_to_me))
-        t->priority = t->before_priority;
-      struct thread *newth = list_entry (list_begin (&t->donation_to_me), struct thread, donating);
-      t->priority = newth->priority;
-    }
-    else
-      list_remove (proper);
-  }
-}
-
-void
-insert_donation_list (struct lock *lock)
-{ 
-  struct thread *t = thread_current ();
-
-  ASSERT (&t->donation_to_me != NULL);
-
-  if (lock->holder == NULL)
-    return 0;
-
-  if ( t->priority > lock->holder->before_priority ){
-    t->donating.priority = t->priority;
-
-    if (list_empty (&lock->holder->donation_to_me)){
-      lock->holder->before_priority = lock->holder->priority;
-    }
-
-    list_insert (list_begin (&lock->holder->donation_to_me), &t->donating);
-    list_sort (&lock->holder->donation_to_me, priorityless, NULL);
-    list_reverse (&lock->holder->donation_to_me);
-  } 
-
-  if (list_begin (&lock->holder->donation_to_me)-> priority > lock->holder->priority)
-    lock->holder->priority = list_begin (&lock->holder->donation_to_me)-> priority;
-  //check_holder_priority (lock);
-}
-
-void
-check_holder_priority (struct lock *lock)
-{
-  if (lock->holder == NULL)
-    return 0;
-
-  int a = list_begin (&lock->holder->donation_to_me)-> priority;
-  if (lock->holder->priority != a)
-    lock->holder->priority = a;
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -326,10 +245,15 @@ void
 lock_release (struct lock *lock) 
 {
   struct thread *th;
+  enum intr_level old_level;
+  old_level = intr_disable ();
+
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
-  remove_donation_list (lock);
+  try_dedonating (lock);
+  update_thread_priority (lock->holder);
+  intr_set_level (old_level);
 
   lock->holder = NULL;
 
@@ -448,4 +372,86 @@ priorityless (const struct list_elem *a, const struct list_elem *b,
   const struct thread *b_ = list_entry (b, struct thread, elem);
   
   return a_->priority < b_->priority;
+}
+
+void
+update_thread_priority (struct thread *t)
+{
+  if (t == NULL)
+    return;
+
+  ASSERT (&t->donation_to_me != NULL);
+
+  int highest = 0;
+
+  struct list_elem *a = t->donation_to_me.head.next;
+  struct list_elem *b = a->next;
+
+  if (list_empty (&t->donation_to_me)){
+    if (t->dona == 0){
+      t->before_priority = t->priority;
+      t->dona = 1;
+    }
+    else{
+      t->priority = t->before_priority;
+      t->dona = 0;
+    }
+  }
+  else{
+    while (a != &t->donation_to_me.tail){
+      struct thread *now = list_entry (a, struct thread, donating);
+      if (now->priority > highest)
+        highest = now->priority;
+      a=b;
+      b=a->next;
+    }
+    t->priority = highest;
+    t->dona = 1;
+  }
+}
+
+void
+try_donating (struct lock *lock)
+{
+  if (lock->holder == NULL)
+    return;
+
+  struct thread *donater = thread_current ();
+  struct thread *receiver = lock->holder;
+
+  if (receiver->dona == 0){
+    receiver->before_priority = receiver->priority;
+  }
+
+  list_push_front (&receiver->donation_to_me, &donater->donating);
+  donater->holder = lock->holder;
+
+}
+
+void
+try_dedonating (struct lock *lock)
+{
+  if (lock->holder == NULL)
+    return;
+
+  struct thread *dedonater = lock->holder;
+  ASSERT (dedonater == thread_current ());
+
+  struct list_elem *a = dedonater->donation_to_me.head.next;
+  struct list_elem *b = a->next;
+
+  if (list_empty (&dedonater->donation_to_me))
+    return;
+  else{
+    while ( a != &dedonater->donation_to_me.tail){
+      struct thread *now = list_entry (a, struct thread, donating);
+      if (now->holder == dedonater){
+        now->holder = NULL;
+        list_remove (a);
+      }
+      a=b;
+      b=a->next;
+    }
+  }
+
 }

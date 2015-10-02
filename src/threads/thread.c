@@ -42,6 +42,8 @@ static struct lock tid_lock;
 
 static bool priority_less (const struct list_elem *, const struct list_elem *,
                         void *);
+static bool priority_high (const struct list_elem *, const struct list_elem *,
+            void *);
 
 void donation_check_all (struct thread *);
 
@@ -225,9 +227,6 @@ thread_create (const char *name, int priority,
 
   thread_yield ();
 
-  //donation_check_all (thread_current ());
-
-  
   return tid;
 }
 
@@ -384,8 +383,22 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
-  thread_yield ();
+  struct thread *t = thread_current();
+  if(t->priority == t->before_priority){
+    t->priority = new_priority;
+    t->before_priority = new_priority;
+  }
+  else{
+    t->before_priority = new_priority;
+  }
+  if(!list_empty(&ready_list))
+  {
+    struct list_elem *pop = list_max (&ready_list, priority_less, NULL);
+    int highest = list_entry(pop, struct thread, elem)->priority;
+    
+    if(thread_current ()->priority < highest)
+      thread_yield();
+  }
 }
 
 /* Returns the current thread's priority. */
@@ -543,10 +556,10 @@ next_thread_to_run (void)
   if (list_empty (&ready_list))
     return idle_thread;
   else{
-    list_sort (&ready_list, priority_less, NULL);
-    list_reverse (&ready_list);
 
-    return list_entry (list_pop_front (&ready_list), struct thread, elem);
+    struct list_elem *pop = list_max (&ready_list, priority_less, NULL);
+    list_remove (pop);
+    return list_entry (pop, struct thread, elem);
   }
 }
 
@@ -683,32 +696,12 @@ priority_less (const struct list_elem *a, const struct list_elem *b,
   return a_->priority < b_->priority;
 }
 
-/*
-void donation_check_all (struct thread *t)
+static bool
+priority_high (const struct list_elem *a, const struct list_elem *b,
+            void *aux UNUSED) 
 {
-  struct list_elem *a = all_list.head.next;
-  struct list_elem *b = a->next;
-
-  while ( a!= &all_list.tail ){
-    struct thread *at = list_entry (a, struct thread, allelem);
-    //printf ("a");
-
-    ASSERT (is_thread (at));
-
-    if (at->tid != t->tid){
-      if (at->status == THREAD_BLOCKED ){
-        //printf ("%d vs %d \n", at->lock_num, t->lock_num);
-        if (at->aux == t->aux){
-          if ( (at->priority) > (t->priority)){
-            //printf ("do some");
-            t->p[0]=1;
-            t->p[1]=t->priority;
-            t->priority=at->priority;
-    }}}}
-
-    a = b;
-    b = a->next;
-  }
-
+  const struct thread *a_ = list_entry (a, struct thread, elem);
+  const struct thread *b_ = list_entry (b, struct thread, elem);
+  
+  return a_->priority > b_->priority;
 }
-*/
