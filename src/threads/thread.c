@@ -191,6 +191,8 @@ thread_create (const char *name, int priority,
   if (t == NULL)
     return TID_ERROR;
 
+  //t->aux = aux;
+
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
@@ -223,10 +225,9 @@ thread_create (const char *name, int priority,
 
   thread_yield ();
 
-  donation_check_all (thread_current ());
+  //donation_check_all (thread_current ());
 
-  //donation_check (thread_current (), &thread_current ()->sema->waiters);
-
+  
   return tid;
 }
 
@@ -329,8 +330,6 @@ thread_yield (void)
 {
   struct thread *cur = thread_current ();
   enum intr_level old_level;
-
-  //donation_check (cur, cur->waiter_for_me);
   
   ASSERT (!intr_context ());
 
@@ -512,8 +511,12 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  t->before_priority = priority;
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
+
+  list_init (&t->donation_to_me);
+
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
@@ -680,6 +683,7 @@ priority_less (const struct list_elem *a, const struct list_elem *b,
   return a_->priority < b_->priority;
 }
 
+/*
 void donation_check_all (struct thread *t)
 {
   struct list_elem *a = all_list.head.next;
@@ -694,17 +698,17 @@ void donation_check_all (struct thread *t)
     if (at->tid != t->tid){
       if (at->status == THREAD_BLOCKED ){
         //printf ("%d vs %d \n", at->lock_num, t->lock_num);
-        //if (at->lock_num == t->lock_num){
+        if (at->aux == t->aux){
           if ( (at->priority) > (t->priority)){
             //printf ("do some");
             t->p[0]=1;
             t->p[1]=t->priority;
             t->priority=at->priority;
-    }}}//}
+    }}}}
 
     a = b;
     b = a->next;
   }
 
 }
-
+*/

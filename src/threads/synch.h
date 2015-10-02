@@ -30,8 +30,10 @@ bool lock_try_acquire (struct lock *);
 void lock_release (struct lock *);
 bool lock_held_by_current_thread (const struct lock *);
 
-void
-donation_check (struct thread *, struct list *);
+void remove_donation_list (struct lock *);
+void insert_donation_list (struct lock *);
+void check_holder_priority (struct lock *);
+struct list_elem * get_proper_elem (struct lock *);
 
 /* Condition variable. */
 struct condition 

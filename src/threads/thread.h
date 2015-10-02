@@ -94,15 +94,20 @@ struct thread
 
     int64_t ticks[2];                   /* [0] for start , [1] for ticks */
 
-    int p[2];         /* [0] ; 0: no donation, 1: donation */
+ //   int p[2];         /* [0] ; 0: no donation, 1: donation */
                       /* [1] : priority before donation */
-
-    int lock_num;
+ //   void *aux;
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
     struct list_elem_sleep sleepelem;
+
+    struct list donation_to_me;   // list the thread donating to me
+
+    struct list_elem donating;
+
+    int before_priority;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */

@@ -204,48 +204,97 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
-  //thread_current ()->lock_num = lock->lock_num;
+  struct thread *t = thread_current ();
+
+  insert_donation_list (lock);
 
   sema_down (&lock->semaphore);
-  lock->holder = thread_current ();
 
-  //donation_check(th, th->waiter_for_me);
+  lock->holder = thread_current ();
 }
 
-void
-donation_check (struct thread *th, struct list *wait_list)
-{
-  if (wait_list == NULL)
-    return 0;
-
-  struct list_elem *a = wait_list->head.next;
+struct list_elem *
+get_proper_elem (struct lock *lock){
+  struct list_elem *a = lock->holder->donation_to_me.head.next;
   struct list_elem *b = a->next;
-  int highest = th->priority;
 
-  if (list_empty (wait_list)){
-    printf("empty\n");
-    printf("%p",wait_list);
-  }
+  ASSERT (lock->holder != NULL);
+  ASSERT (!list_empty (&lock->holder->donation_to_me));
 
-  while ( a != &wait_list->tail ){
-
-    struct thread *t = list_entry (a, struct thread, elem);
-    ASSERT (wait_list != NULL);
-    printf ("how many \n");
-    if (t->priority > highest){
-      highest = t->priority;
-    }
+  while ( a != &lock->holder->donation_to_me.tail ){
+    if (a->priority == lock->holder->priority)
+      return a;
     a = b;
     b = a->next;
   }
+}
 
-  if (highest != th->priority){
-    th->p[0]=1;
-    th->p[1]=th->priority;
-    th->priority = highest;
+void
+remove_donation_list (struct lock *lock)
+{
+  if (lock->holder == NULL){
+    return 0;
   }
 
+  if (list_empty (&lock->holder->donation_to_me))
+    return 0;
 
+  struct thread *t = thread_current ();
+  ASSERT (t == lock->holder);
+
+  if (t->priority != t->before_priority ){
+    struct list_elem *proper = get_proper_elem (lock);
+
+    ASSERT (proper != NULL);
+
+    if (t->priority < proper->priority || t->priority == proper->priority){
+      list_remove (proper);
+      if (list_empty (&t->donation_to_me))
+        t->priority = t->before_priority;
+      struct thread *newth = list_entry (list_begin (&t->donation_to_me), struct thread, donating);
+      t->priority = newth->priority;
+    }
+    else
+      list_remove (proper);
+  }
+}
+
+void
+insert_donation_list (struct lock *lock)
+{ 
+  struct thread *t = thread_current ();
+
+  ASSERT (&t->donation_to_me != NULL);
+
+  if (lock->holder == NULL)
+    return 0;
+
+  if ( t->priority > lock->holder->before_priority ){
+    t->donating.priority = t->priority;
+
+    if (list_empty (&lock->holder->donation_to_me)){
+      lock->holder->before_priority = lock->holder->priority;
+    }
+
+    list_insert (list_begin (&lock->holder->donation_to_me), &t->donating);
+    list_sort (&lock->holder->donation_to_me, priorityless, NULL);
+    list_reverse (&lock->holder->donation_to_me);
+  } 
+
+  if (list_begin (&lock->holder->donation_to_me)-> priority > lock->holder->priority)
+    lock->holder->priority = list_begin (&lock->holder->donation_to_me)-> priority;
+  //check_holder_priority (lock);
+}
+
+void
+check_holder_priority (struct lock *lock)
+{
+  if (lock->holder == NULL)
+    return 0;
+
+  int a = list_begin (&lock->holder->donation_to_me)-> priority;
+  if (lock->holder->priority != a)
+    lock->holder->priority = a;
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -280,18 +329,12 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
+  remove_donation_list (lock);
+
   lock->holder = NULL;
 
-  
-  th = thread_current ();
-
-  if (th->p[0]==1){
-    th->priority = th->p[1];
-    th->p[0]=0;
-  }
-  
-
   sema_up (&lock->semaphore);
+
   thread_yield ();
 }
 
