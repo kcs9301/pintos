@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "threads/fp.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -81,6 +82,8 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
+int load_avg;
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -121,6 +124,8 @@ thread_start (void)
   struct semaphore idle_started;
   sema_init (&idle_started, 0);
   thread_create ("idle", PRI_MIN, idle, &idle_started);
+
+  load_avg = 0;
 
   /* Start preemptive thread scheduling. */
   intr_enable ();
@@ -411,25 +416,33 @@ thread_get_priority (void)
 
 /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice (int nice UNUSED) 
+thread_set_nice (int nice) 
 {
-  /* Not yet implemented. */
+  enum intr_level old_level = intr_disable ();
+  struct list_elem *pop = list_max (&ready_list, priority_less, NULL);
+  struct thread *next = list_entry (pop, struct thread, elem);
+  
+  thread_current ()->nice = nice;
+  th_priority_update (thread_current ());
+
+  if (next->priority > thread_current ()->priority)
+    thread_yield ();
+
+  intr_set_level (old_level);
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return thread_current ()->nice;
 }
 
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return fp_to_int (mult_fp_int (load_avg, 100));
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
@@ -437,7 +450,7 @@ int
 thread_get_recent_cpu (void) 
 {
   /* Not yet implemented. */
-  return 0;
+  return fp_to_int (mult_fp_int (thread_current ()->recent_cpu, 100));
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -704,4 +717,67 @@ priority_high (const struct list_elem *a, const struct list_elem *b,
   const struct thread *b_ = list_entry (b, struct thread, elem);
   
   return a_->priority > b_->priority;
+}
+
+void
+recent_cpu_update (void){
+  if (thread_current() == idle_thread)
+    return;
+  else
+    thread_current ()->recent_cpu = add_fp_int (thread_current()->recent_cpu, 1);
+}
+
+void
+th_recent_cpu_update (struct thread *t){
+  int a, b;
+  if (t == idle_thread)
+    return;
+  else{
+    a = div_fp ((2*load_avg), (add_fp_int (2*load_avg, 1)));
+    b = mult_fp (a, t->recent_cpu);
+    t->recent_cpu = add_fp_int (b, t->nice);
+  }
+}
+
+void
+th_priority_update (struct thread *t){
+  int a, b, c;
+
+  if (t == idle_thread)
+    return;
+  else{
+    a = div_fp_int (t->recent_cpu, 4);
+    b = add_fp_int (a, (t->nice * 2));
+    c = fp_to_int (sub_fp_int (int_to_fp (63), b));
+    if (c < 0)
+      c = 0;
+    if (c > 63)
+      c = 63;
+    t->priority = c;
+  }
+}
+
+void
+load_avg_update (void)
+{
+  int ls = list_size (&ready_list);
+  if (thread_current () != idle_thread)
+    ls++;
+  int a = div_fp_int (int_to_fp (59), 60);
+  int b = div_fp_int (int_to_fp (ls), 60);
+  load_avg = add_fp (mult_fp (a, load_avg), b);
+  ASSERT (load_avg >= 0);
+}
+
+void
+all_thread_priority_update (void)
+{
+  struct list_elem *e;
+  for (e = list_begin(&all_list); e != list_end(&all_list);
+       e = list_next(e))
+    {
+      struct thread *t = list_entry(e, struct thread, allelem);
+      th_recent_cpu_update (t);
+      th_priority_update (t);
+    }
 }

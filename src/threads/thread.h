@@ -108,6 +108,9 @@ struct thread
     int before_priority;
     int dona;
 
+    int recent_cpu;
+    int nice;
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -141,7 +144,11 @@ const char *thread_name (void);
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);
 
-
+void recent_cpu_update (void);
+void th_priority_update (struct thread *);
+void th_recent_cpu_update (struct thread *);
+void load_avg_updqte (void);
+void all_thread_priority_update (void);
 
 /* Performs some operation on thread t, given auxiliary data AUX. */
 typedef void thread_action_func (struct thread *t, void *aux);

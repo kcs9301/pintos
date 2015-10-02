@@ -445,7 +445,7 @@ try_dedonating (struct lock *lock)
   else{
     while ( a != &dedonater->donation_to_me.tail){
       struct thread *now = list_entry (a, struct thread, donating);
-      if (now->holder == dedonater){
+      if (now->holder->tid == dedonater->tid){
         now->holder = NULL;
         list_remove (a);
       }
